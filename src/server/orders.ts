@@ -378,7 +378,7 @@ export function getCheckoutData(database: AppDatabase, token: string, signedRetu
     expires_at: order.expires_at,
     monitor_until: order.monitor_until,
     payment_poll_interval_seconds: getPaymentPollIntervalSeconds(database),
-    payment_uri: order.collection_mode === "transfer" ? createTransferUri(order, transferUserId, transferLinkLayer) : "",
+    payment_uri: order.collection_mode === "transfer" ? createTransferUri(order, transferUserId, transferLinkLayer) : "alipays://platformapi/startapp?saId=10000007",
     business_qr_url: businessQrUrl,
     return_url: order.return_url,
     return_target: signedReturnUrl ?? null,

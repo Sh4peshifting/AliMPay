@@ -95,6 +95,7 @@ test("first-run setup, key generation, QR upload and public checkout", async ({ 
   await page.goto(order.payurl);
   await expect(page.getByRole("heading", { name: "¥1.01" })).toBeVisible({ timeout: 12_000 });
   await expect(page.getByAltText("支付宝经营码")).toBeVisible();
+  await expect(page.getByRole("link", { name: "打开支付宝扫一扫" })).toHaveAttribute("href", "alipays://platformapi/startapp?saId=10000007");
 });
 
 test("mobile navigation is usable and transfer checkout opens Alipay", async ({ page }, testInfo) => {

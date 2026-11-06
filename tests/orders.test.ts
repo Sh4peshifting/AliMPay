@@ -112,6 +112,12 @@ describe("payment state machine", () => {
     expect(getCheckoutData(database, order.checkout_token)?.payment_poll_interval_seconds).toBe(12);
   });
 
+  it("opens Alipay Scan for business QR checkout (issue #1)", () => {
+    ({ database } = configuredDatabase());
+    const order = createOrder(database, orderInput(1)).order;
+    expect(getCheckoutData(database, order.checkout_token)?.payment_uri).toBe("alipays://platformapi/startapp?saId=10000007");
+  });
+
   it("maps expired to unpaid and late paid to paid externally", () => {
     expect(externalStatus("pending")).toBe(0);
     expect(externalStatus("expired")).toBe(0);

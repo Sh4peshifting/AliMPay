@@ -10,6 +10,7 @@ import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import { Card, CardContent } from "@/web/components/ui/card";
 import { Input } from "@/web/components/ui/input";
+import { DateTimeInput } from "@/web/components/ui/date-time-input";
 import { Loading } from "@/web/components/ui/loading";
 import { Label } from "@/web/components/ui/label";
 import { formatDate, formatMoney } from "@/web/lib/utils";
@@ -72,8 +73,8 @@ export function OrdersPage() {
             </select>
             </div>
             <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-0 flex-1 space-y-2"><Label htmlFor="order-start">起始时间（UTC+8）</Label><Input id="order-start" type="datetime-local" step="1" value={startInput} onChange={(event) => setStartInput(event.target.value)} /></div>
-              <div className="min-w-0 flex-1 space-y-2"><Label htmlFor="order-end">结束时间（UTC+8）</Label><Input id="order-end" type="datetime-local" step="1" value={endInput} onChange={(event) => setEndInput(event.target.value)} /></div>
+              <div className="min-w-0 flex-1 space-y-2"><Label htmlFor="order-start">起始时间（UTC+8）</Label><DateTimeInput id="order-start" value={startInput} onChange={(event) => setStartInput(event.target.value)} /></div>
+              <div className="min-w-0 flex-1 space-y-2"><Label htmlFor="order-end">结束时间（UTC+8）</Label><DateTimeInput id="order-end" value={endInput} onChange={(event) => setEndInput(event.target.value)} /></div>
               <Button type="submit" variant="outline"><Search />筛选</Button>
               <Button type="button" variant="ghost" onClick={() => { setStartInput(""); setEndInput(""); setRange({ start: "", end: "" }); setRangeError(""); setQueryInput(""); setQuery(""); setStatus(""); setPage(1); }}>重置</Button>
             </div>

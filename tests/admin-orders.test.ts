@@ -92,11 +92,44 @@ describe("admin order time filters", () => {
     database.query("UPDATE orders SET status = 'expired', created_at = ? WHERE id = ?").run(createdAt, unpaid.id);
     const outside = createOrder(database, { ...orderInput(27), money: "99.99" }).order;
     database.query("UPDATE orders SET status = 'paid', created_at = '2026-11-07T00:00:00.000Z' WHERE id = ?").run(outside.id);
-    const params = new URLSearchParams({ start_time: createdAt, end_time: createdAt, limit: "1", page: "2", status: "pending", q: "no-matching-order" });
+    const params = new URLSearchParams({ start_time: createdAt, end_time: createdAt, limit: "1", page: "2", status: "pending", q: "Test order" });
     const response = await app.request(`http://localhost/admin-api/orders?${params}`, { headers });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ total: 0, data: [], paid_summary: { paid_count: 25, paid_amount_cents: 2825, requested_amount_cents: 2500 } });
     expect(paidOrderSummary(database, { startTime: "2027-01-01T00:00:00.000Z" })).toEqual({ paid_count: 0, paid_amount_cents: 0, requested_amount_cents: 0 });
+  });
+
+  it("applies the same keyword and time filters to payment totals for all searchable fields", async () => {
+    const createdAt = "2026-11-06T08:00:00.000Z";
+    const statuses = ["paid", "late_paid", "manual_paid", "pending", "paid"];
+    for (let i = 1; i <= statuses.length; i++) {
+      const order = createOrder(database, {
+        ...orderInput(i), outTradeNo: `MERCHANT-MATCH-${i}`, name: `会员订阅 ${i === 2 ? "100%_\\套餐" : i}`, money: `${i}.00`,
+      }).order;
+      database.query("UPDATE orders SET trade_no = ?, status = ?, created_at = ? WHERE id = ?").run(
+        `PLATFORM-MATCH-${i}`, statuses[i - 1]!, i === 5 ? "2026-11-07T08:00:00.000Z" : createdAt, order.id,
+      );
+    }
+    const other = createOrder(database, { ...orderInput(6), name: "普通商品", money: "9.99" }).order;
+    database.query("UPDATE orders SET status = 'paid', created_at = ? WHERE id = ?").run(createdAt, other.id);
+    const params = new URLSearchParams({ start_time: createdAt, end_time: createdAt, limit: "1", page: "2", status: "pending" });
+    for (const query of ["  PLATFORM-MATCH  ", "MERCHANT-MATCH", "会员订阅"]) {
+      params.set("q", query);
+      const response = await app.request(`http://localhost/admin-api/orders?${params}`, { headers });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ paid_summary: { paid_count: 3, paid_amount_cents: 603, requested_amount_cents: 600 } });
+    }
+    for (const query of ["MATCH-2", "%_\\"]) {
+      params.set("q", query);
+      const response = await app.request(`http://localhost/admin-api/orders?${params}`, { headers });
+      expect(await response.json()).toMatchObject({ paid_summary: { paid_count: 1, paid_amount_cents: 201, requested_amount_cents: 200 } });
+    }
+    params.set("q", "no-matching-order");
+    const empty = await app.request(`http://localhost/admin-api/orders?${params}`, { headers });
+    expect(await empty.json()).toMatchObject({ paid_summary: { paid_count: 0, paid_amount_cents: 0, requested_amount_cents: 0 } });
+    params.set("q", "");
+    const reset = await app.request(`http://localhost/admin-api/orders?${params}`, { headers });
+    expect(await reset.json()).toMatchObject({ paid_summary: { paid_count: 4, paid_amount_cents: 1603, requested_amount_cents: 1599 } });
   });
 
   it("includes both endpoints, combines filters and counts beyond the current page", async () => {

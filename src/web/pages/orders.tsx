@@ -88,7 +88,7 @@ export function OrdersPage() {
               <div><div className="text-xs text-muted">成功订单</div><div className="mt-2 font-mono text-2xl font-semibold">{summary ? `${summary.paid_count} 笔` : "—"}</div></div>
               <div><div className="text-xs text-muted">商户金额合计</div><div className="mt-2 font-mono text-2xl font-semibold">{summary ? formatMoney(summary.requested_amount_cents) : "—"}</div></div>
             </div>
-            <p className="mt-3 text-xs leading-5 text-muted">包含支付成功、迟到支付和补单。按{range.start || range.end ? "所选创建时段" : "全部时间"}统计，不受搜索、状态或分页影响；成功实收包含经营码分位加价。</p>
+            <p className="mt-3 text-xs leading-5 text-muted">包含支付成功、迟到支付和补单。按{range.start || range.end ? "所选创建时段" : "全部时间"}及已应用的搜索条件，汇总全部匹配的成功订单；成功实收包含经营码分位加价。</p>
           </div>
 
           {error ? <p role="alert" className="py-8 text-center text-sm text-destructive">{error instanceof Error ? error.message : "订单读取失败"}</p> : isLoading ? <Loading /> : !data?.data.length ? <div className="py-16 text-center text-sm text-muted">没有符合条件的订单</div> : (

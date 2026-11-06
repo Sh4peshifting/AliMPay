@@ -217,15 +217,14 @@ export function createAdminRoutes(database: AppDatabase, scanner: PaymentScanner
     const startTime = orderTime(c.req.query("start_time"));
     const endTime = orderTime(c.req.query("end_time"));
     assert(!startTime || !endTime || startTime <= endTime, 400, "INVALID_TIME_RANGE", "起始时间不能晚于结束时间");
+    const filters = { startTime, endTime, query: c.req.query("q")?.trim() };
     const result = listOrders(database, {
+      ...filters,
       status,
-      startTime,
-      endTime,
-      query: c.req.query("q")?.trim(),
       limit,
       offset: (page - 1) * limit,
     });
-    return c.json({ ...result, page, paid_summary: paidOrderSummary(database, { startTime, endTime }) });
+    return c.json({ ...result, page, paid_summary: paidOrderSummary(database, filters) });
   });
 
   app.get("/orders/:id", (c) => {

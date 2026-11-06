@@ -180,19 +180,15 @@ export function getActiveOrders(database: AppDatabase, now = new Date().toISOStr
   `).all(now) as OrderRecord[];
 }
 
-export function listOrders(database: AppDatabase, options: {
-  status?: OrderStatus;
-  externalPaid?: boolean;
+interface OrderFilters {
   query?: string;
-  limit?: number;
-  offset?: number;
-  pid?: string;
   startTime?: string;
   endTime?: string;
-} = {}) {
-  expireOrders(database);
+}
+
+function orderFilters(options: OrderFilters) {
   const where: string[] = [];
-  const bindings: Array<string | number> = [];
+  const bindings: string[] = [];
   if (options.startTime) {
     where.push("created_at >= ?");
     bindings.push(options.startTime);
@@ -201,6 +197,23 @@ export function listOrders(database: AppDatabase, options: {
     where.push("created_at <= ?");
     bindings.push(options.endTime);
   }
+  if (options.query) {
+    where.push("(trade_no LIKE ? ESCAPE '\\' OR out_trade_no LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')");
+    const like = `%${options.query.replace(/[\\%_]/g, "\\$&")}%`;
+    bindings.push(like, like, like);
+  }
+  return { where, bindings };
+}
+
+export function listOrders(database: AppDatabase, options: OrderFilters & {
+  status?: OrderStatus;
+  externalPaid?: boolean;
+  limit?: number;
+  offset?: number;
+  pid?: string;
+} = {}) {
+  expireOrders(database);
+  const { where, bindings } = orderFilters(options);
   if (options.status) {
     where.push("status = ?");
     bindings.push(options.status);
@@ -210,11 +223,6 @@ export function listOrders(database: AppDatabase, options: {
   if (options.pid) {
     where.push("pid = ?");
     bindings.push(options.pid);
-  }
-  if (options.query) {
-    where.push("(trade_no LIKE ? ESCAPE '\\' OR out_trade_no LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')");
-    const like = `%${options.query.replace(/[\\%_]/g, "\\$&")}%`;
-    bindings.push(like, like, like);
   }
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const limit = Math.max(1, Math.min(100, options.limit ?? 20));
@@ -235,17 +243,9 @@ export interface AccountLogEvent {
   raw: Record<string, unknown>;
 }
 
-export function paidOrderSummary(database: AppDatabase, options: { startTime?: string; endTime?: string } = {}): PaidOrderSummary {
-  const where = ["status IN ('paid', 'late_paid', 'manual_paid')"];
-  const bindings: string[] = [];
-  if (options.startTime) {
-    where.push("created_at >= ?");
-    bindings.push(options.startTime);
-  }
-  if (options.endTime) {
-    where.push("created_at <= ?");
-    bindings.push(options.endTime);
-  }
+export function paidOrderSummary(database: AppDatabase, options: OrderFilters = {}): PaidOrderSummary {
+  const { where, bindings } = orderFilters(options);
+  where.push("status IN ('paid', 'late_paid', 'manual_paid')");
   return database.query(`
     SELECT COUNT(*) AS paid_count,
       COALESCE(SUM(payable_amount_cents), 0) AS paid_amount_cents,

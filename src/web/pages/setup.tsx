@@ -1,6 +1,6 @@
 import { ArrowRight, CheckCircle2, KeyRound, ScanLine, ShieldCheck, WalletCards } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import useSWR, { useSWRConfig } from "swr";
 import { apiFetch, jsonBody, swrFetcher } from "@/web/api";
 import { Button } from "@/web/components/ui/button";
@@ -10,7 +10,6 @@ import { Label } from "@/web/components/ui/label";
 import { Loading } from "@/web/components/ui/loading";
 
 export function SetupPage() {
-  const navigate = useNavigate();
   const { mutate } = useSWRConfig();
   const { data, isLoading } = useSWR<{ setup_completed: boolean }>("/admin-api/setup/status", swrFetcher);
   const [password, setPassword] = useState("");
@@ -18,7 +17,9 @@ export function SetupPage() {
   const [baseUrl, setBaseUrl] = useState(window.location.origin);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [completed, setCompleted] = useState(false);
 
+  if (completed) return <Navigate to="/dashboard" replace />;
   if (isLoading) return <Loading label="正在检查系统状态" />;
   if (data?.setup_completed && !submitting) return <Navigate to="/login" replace />;
 
@@ -35,7 +36,7 @@ export function SetupPage() {
       const session = await apiFetch("/admin-api/me");
       await mutate("/admin-api/me", session, { revalidate: false });
       await mutate("/admin-api/setup/status", { setup_completed: true }, { revalidate: false });
-      navigate("/dashboard", { replace: true });
+      setCompleted(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "初始化失败");
     } finally {

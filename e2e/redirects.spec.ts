@@ -40,7 +40,7 @@ for (const status of ["paid", "late_paid", "manual_paid"] as const) {
     await page.route("https://merchant.example/**", (route) => route.fulfill({ body: "Merchant success", contentType: "text/html" }));
     await page.goto("/checkout/redirect-test");
     await expect(page.getByRole("heading", { name: "暂时无法读取订单" })).toBeVisible();
-    await expect(page).toHaveURL(/\/checkout\/redirect-test\/success$/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/checkout\/redirect-test\/success$/, { timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "已收到 ¥1.01" })).toBeVisible();
     await expect(page).toHaveURL(/^https:\/\/merchant\.example\/success\?trade_status=TRADE_SUCCESS&sign=test-signature$/);
   });

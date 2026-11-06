@@ -23,16 +23,20 @@ function isMobileBrowser() {
     (/Macintosh/i.test(browserNavigator.userAgent) && browserNavigator.maxTouchPoints > 1);
 }
 
+// Keep this function stable: SWR restarts its polling timer when the callback
+// changes. An inline callback would be replaced on every countdown tick.
+function checkoutRefreshInterval(latest: CheckoutData | undefined) {
+  if (latest && isPaidStatus(latest.status)) return 0;
+  if (latest && Date.parse(latest.monitor_until) <= Date.now()) return 30_000;
+  return (latest?.payment_poll_interval_seconds ?? PAYMENT_POLL_INTERVAL_DEFAULT_SECONDS) * 1_000;
+}
+
 export function CheckoutPage({ successPage = false }: { successPage?: boolean }) {
   const { token = "" } = useParams();
   const [now, setNow] = useState(Date.now());
   const mobileRedirectAttempted = useRef(false);
   const { data, error, isLoading } = useSWR<CheckoutData>(`/public-api/checkout/${encodeURIComponent(token)}`, swrFetcher, {
-    refreshInterval: (latest) => {
-      if (latest && isPaidStatus(latest.status)) return 0;
-      if (latest && Date.parse(latest.monitor_until) <= Date.now()) return 30_000;
-      return (latest?.payment_poll_interval_seconds ?? PAYMENT_POLL_INTERVAL_DEFAULT_SECONDS) * 1_000;
-    },
+    refreshInterval: checkoutRefreshInterval,
     refreshWhenHidden: true,
     shouldRetryOnError: (caught) => !(caught instanceof ApiClientError) || caught.status >= 500 || caught.status === 429,
     errorRetryInterval: 5_000,

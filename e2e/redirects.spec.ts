@@ -27,7 +27,8 @@ for (const status of ["paid", "late_paid", "manual_paid"] as const) {
       trade_no: "REDIRECT-1", out_trade_no: "MERCHANT-1", name: "Redirect test",
       requested_money: "1.00", payable_money: "1.01", collection_mode: "business_qr", status: "pending",
       created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 300_000).toISOString(),
-      monitor_until: new Date(Date.now() + 600_000).toISOString(), payment_poll_interval_seconds: 1,
+      // A multi-second interval must survive the once-per-second countdown render.
+      monitor_until: new Date(Date.now() + 600_000).toISOString(), payment_poll_interval_seconds: 3,
       payment_uri: "", business_qr_url: "", return_url: "https://merchant.example/success", return_target: null,
     };
     await page.route("**/public-api/checkout/redirect-test", async (route) => {

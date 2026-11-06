@@ -1,4 +1,4 @@
-import type { ApiVersion, CheckoutData, CollectionMode, OrderRecord, OrderStatus, TransferLinkLayer } from "../shared/contracts";
+import type { ApiVersion, CheckoutData, CollectionMode, OrderRecord, OrderStatus, PaidOrderSummary, TransferLinkLayer } from "../shared/contracts";
 import { isPaidStatus } from "../shared/contracts";
 import { audit, getSetting, type AppDatabase } from "./db";
 import { AppError, assert } from "./errors";
@@ -233,6 +233,25 @@ export interface AccountLogEvent {
   transMemo: string;
   otherAccount: string;
   raw: Record<string, unknown>;
+}
+
+export function paidOrderSummary(database: AppDatabase, options: { startTime?: string; endTime?: string } = {}): PaidOrderSummary {
+  const where = ["status IN ('paid', 'late_paid', 'manual_paid')"];
+  const bindings: string[] = [];
+  if (options.startTime) {
+    where.push("created_at >= ?");
+    bindings.push(options.startTime);
+  }
+  if (options.endTime) {
+    where.push("created_at <= ?");
+    bindings.push(options.endTime);
+  }
+  return database.query(`
+    SELECT COUNT(*) AS paid_count,
+      COALESCE(SUM(payable_amount_cents), 0) AS paid_amount_cents,
+      COALESCE(SUM(requested_amount_cents), 0) AS requested_amount_cents
+    FROM orders WHERE ${where.join(" AND ")}
+  `).get(...bindings) as PaidOrderSummary;
 }
 
 export function recordAndMatchPayment(database: AppDatabase, event: AccountLogEvent, candidates: OrderRecord[]) {

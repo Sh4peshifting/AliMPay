@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createSession } from "../src/server/auth";
 import type { AppDatabase } from "../src/server/db";
 import { createApp } from "../src/server/index";
-import { createOrder, getOrderById, listOrders, markOrderPaid, recordAndMatchPayment } from "../src/server/orders";
+import { createOrder, getOrderById, listOrders, markOrderPaid, paidOrderSummary, recordAndMatchPayment } from "../src/server/orders";
 import { buildSignedReturnUrl, NotificationWorker, queueManualNotification } from "../src/server/notifications";
 import { verifyMd5 } from "../src/server/security";
 import { configuredDatabase, orderInput } from "./helpers";
@@ -82,6 +82,23 @@ describe("manual payment confirmation", () => {
 afterEach(() => database.close());
 
 describe("admin order time filters", () => {
+  it("sums all three successful states across pages and ignores unpaid and out-of-range orders", async () => {
+    const createdAt = "2026-11-06T08:00:00.000Z";
+    for (let i = 1; i <= 25; i++) {
+      const order = createOrder(database, orderInput(i)).order;
+      database.query("UPDATE orders SET status = ?, created_at = ? WHERE id = ?").run(["paid", "late_paid", "manual_paid"][i % 3]!, createdAt, order.id);
+    }
+    const unpaid = createOrder(database, orderInput(26)).order;
+    database.query("UPDATE orders SET status = 'expired', created_at = ? WHERE id = ?").run(createdAt, unpaid.id);
+    const outside = createOrder(database, { ...orderInput(27), money: "99.99" }).order;
+    database.query("UPDATE orders SET status = 'paid', created_at = '2026-11-07T00:00:00.000Z' WHERE id = ?").run(outside.id);
+    const params = new URLSearchParams({ start_time: createdAt, end_time: createdAt, limit: "1", page: "2", status: "pending", q: "no-matching-order" });
+    const response = await app.request(`http://localhost/admin-api/orders?${params}`, { headers });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ total: 0, data: [], paid_summary: { paid_count: 25, paid_amount_cents: 2825, requested_amount_cents: 2500 } });
+    expect(paidOrderSummary(database, { startTime: "2027-01-01T00:00:00.000Z" })).toEqual({ paid_count: 0, paid_amount_cents: 0, requested_amount_cents: 0 });
+  });
+
   it("includes both endpoints, combines filters and counts beyond the current page", async () => {
     const times = ["2026-11-05T15:59:59.999Z", "2026-11-05T16:00:00.000Z", "2026-11-06T15:59:59.000Z", "2026-11-06T16:00:00.000Z"];
     times.forEach((time, index) => {

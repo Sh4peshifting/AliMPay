@@ -7,6 +7,12 @@ export function isPaidStatus(status: OrderStatus) {
   return status === "paid" || status === "late_paid" || status === "manual_paid";
 }
 
+export interface PaidOrderSummary {
+  paid_count: number;
+  paid_amount_cents: number;
+  requested_amount_cents: number;
+}
+
 export const PAYMENT_POLL_INTERVAL_DEFAULT_SECONDS = 5;
 export const PAYMENT_POLL_INTERVAL_MIN_SECONDS = 1;
 export const PAYMENT_POLL_INTERVAL_MAX_SECONDS = 60;

@@ -31,7 +31,7 @@ import { audit, getSetting, setSetting, type AppDatabase } from "./db";
 import { getRuntimeEnv } from "./env";
 import { AppError, assert } from "./errors";
 import { notificationHistory, queueManualNotification } from "./notifications";
-import { getOrderById, listOrders, markOrderPaid } from "./orders";
+import { getOrderById, listOrders, markOrderPaid, paidOrderSummary } from "./orders";
 import {
   generateRsaKeyPair,
   randomAlphaNumeric,
@@ -225,7 +225,7 @@ export function createAdminRoutes(database: AppDatabase, scanner: PaymentScanner
       limit,
       offset: (page - 1) * limit,
     });
-    return c.json({ ...result, page });
+    return c.json({ ...result, page, paid_summary: paidOrderSummary(database, { startTime, endTime }) });
   });
 
   app.get("/orders/:id", (c) => {

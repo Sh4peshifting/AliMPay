@@ -1,10 +1,10 @@
 import { CheckCircle2, Clock3, ExternalLink, ShieldCheck, TriangleAlert, WalletCards } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import useSWR from "swr";
 import { PAYMENT_POLL_INTERVAL_DEFAULT_SECONDS, type CheckoutData } from "@/shared/contracts";
-import { swrFetcher } from "@/web/api";
+import { ApiClientError, swrFetcher } from "@/web/api";
 import { Badge } from "@/web/components/ui/badge";
 import { Button } from "@/web/components/ui/button";
 import { Card, CardContent } from "@/web/components/ui/card";
@@ -23,7 +23,7 @@ function isMobileBrowser() {
     (/Macintosh/i.test(browserNavigator.userAgent) && browserNavigator.maxTouchPoints > 1);
 }
 
-export function CheckoutPage() {
+export function CheckoutPage({ successPage = false }: { successPage?: boolean }) {
   const { token = "" } = useParams();
   const [now, setNow] = useState(Date.now());
   const mobileRedirectAttempted = useRef(false);
@@ -32,7 +32,9 @@ export function CheckoutPage() {
       if (latest && (["paid", "late_paid"].includes(latest.status) || Date.parse(latest.monitor_until) <= Date.now())) return 0;
       return (latest?.payment_poll_interval_seconds ?? PAYMENT_POLL_INTERVAL_DEFAULT_SECONDS) * 1_000;
     },
-    shouldRetryOnError: false,
+    refreshWhenHidden: true,
+    shouldRetryOnError: (caught) => !(caught instanceof ApiClientError) || caught.status >= 500 || caught.status === 429,
+    errorRetryInterval: 5_000,
   });
   const { data: generatedQr } = useSWR(
     data?.collection_mode === "transfer" && data.payment_uri ? ["transfer-qr", data.payment_uri] : null,
@@ -59,17 +61,26 @@ export function CheckoutPage() {
     window.location.assign(data.payment_uri);
   }, [data]);
 
+  useEffect(() => {
+    if (!successPage || !data?.return_target || !["paid", "late_paid"].includes(data.status)) return;
+    const timer = window.setTimeout(() => window.location.replace(data.return_target!), 3_000);
+    return () => window.clearTimeout(timer);
+  }, [successPage, data?.status, data?.return_target]);
+
   if (isLoading) return <Loading label="正在读取支付订单" />;
-  if (error || !data) return <main className="flex min-h-screen items-center justify-center px-4"><div className="max-w-sm text-center"><TriangleAlert className="mx-auto size-9 text-destructive" /><h1 className="mt-4 text-xl font-semibold">订单不存在</h1><p className="mt-2 text-sm text-muted">链接可能无效，或订单信息无法读取。</p></div></main>;
+  if (!data) return <main className="flex min-h-screen items-center justify-center px-4"><div className="max-w-sm text-center"><TriangleAlert className="mx-auto size-9 text-destructive" /><h1 className="mt-4 text-xl font-semibold">{error instanceof ApiClientError && error.status === 404 ? "订单不存在" : "暂时无法读取订单"}</h1><p className="mt-2 text-sm text-muted">{error instanceof ApiClientError && error.status === 404 ? "链接可能无效，请检查支付地址。" : "请检查网络连接，页面会自动重试。"}</p></div></main>;
 
   const paid = data.status === "paid" || data.status === "late_paid";
   const checkoutExpired = now >= Date.parse(data.expires_at);
   const monitoringEnded = now >= Date.parse(data.monitor_until);
 
+  if (paid && !successPage) return <Navigate to={`/checkout/${encodeURIComponent(token)}/success`} replace />;
+  if (!paid && successPage) return <Navigate to={`/checkout/${encodeURIComponent(token)}`} replace />;
+
   if (paid) {
     return (
       <main className="flex min-h-screen items-center justify-center px-4 py-12">
-        <Card className="w-full max-w-md"><CardContent className="px-6 py-10 text-center"><CheckCircle2 className="mx-auto size-12 text-success" /><Badge className="mt-5" variant={data.status === "late_paid" ? "primary" : "success"}>{data.status === "late_paid" ? "迟到支付已确认" : "支付成功"}</Badge><h1 className="mt-4 text-2xl font-semibold tracking-tight">已收到 ¥{data.payable_money}</h1><p className="mt-2 text-sm text-muted">订单 {data.out_trade_no} 已完成，商户通知正在后台投递。</p>{data.return_target ? <Button className="mt-6 w-full" asChild><a href={data.return_target}>返回商户页面<ExternalLink /></a></Button> : null}<p className="mt-5 text-xs text-muted">支付结果以商户服务器验签后的异步通知为准。</p></CardContent></Card>
+        <Card className="w-full max-w-md"><CardContent className="px-6 py-10 text-center"><CheckCircle2 className="mx-auto size-12 text-success" /><Badge className="mt-5" variant={data.status === "late_paid" ? "primary" : "success"}>{data.status === "late_paid" ? "迟到支付已确认" : "支付成功"}</Badge><h1 className="mt-4 text-2xl font-semibold tracking-tight">已收到 ¥{data.payable_money}</h1><p className="mt-2 text-sm text-muted">订单 {data.out_trade_no} 已完成，商户通知正在后台投递。</p>{data.return_target ? <><p className="mt-4 text-sm text-muted">3 秒后自动返回商户页面</p><Button className="mt-4 w-full" asChild><a href={data.return_target}>返回商户页面<ExternalLink /></a></Button></> : null}<p className="mt-5 text-xs text-muted">支付结果以商户服务器验签后的异步通知为准。</p></CardContent></Card>
       </main>
     );
   }
@@ -87,6 +98,7 @@ export function CheckoutPage() {
         <div className="grid gap-6 md:grid-cols-[1fr_320px]">
           <Card>
             <CardContent className="px-5 py-6 sm:px-7">
+              {error ? <p role="alert" className="mb-4 text-sm text-destructive">状态查询暂时失败，正在重试，请勿重复付款。</p> : null}
               <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm text-muted">{data.name}</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">¥{data.payable_money}</h1></div><Badge variant={checkoutExpired ? "danger" : "primary"}>{checkoutExpired ? "收银台已过期，正在确认" : `剩余 ${countdown(Date.parse(data.expires_at) - now)}`}</Badge></div>
               {data.payable_money !== data.requested_money ? <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm leading-6"><span className="font-semibold">请按显示金额准确支付。</span> 商户金额为 ¥{data.requested_money}，系统为本订单分配了唯一分位金额。</div> : null}
 

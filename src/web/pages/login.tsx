@@ -1,7 +1,7 @@
 import { LogIn, WalletCards } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
-import useSWR, { mutate } from "swr";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import useSWR, { useSWRConfig } from "swr";
 import { apiFetch, jsonBody, swrFetcher } from "@/web/api";
 import { Button } from "@/web/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/web/components/ui/card";
@@ -11,6 +11,8 @@ import { Loading } from "@/web/components/ui/loading";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { mutate } = useSWRConfig();
   const { data, isLoading } = useSWR<{ setup_completed: boolean }>("/admin-api/setup/status", swrFetcher);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,8 +26,10 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await apiFetch("/admin-api/login", { method: "POST", ...jsonBody({ username: "admin", password }) });
-      await mutate("/admin-api/me");
-      navigate("/dashboard", { replace: true });
+      const session = await apiFetch("/admin-api/me");
+      await mutate("/admin-api/me", session, { revalidate: false });
+      const from = location.state?.from;
+      navigate(typeof from === "string" && /^\/(?!\/)/.test(from) ? from : "/dashboard", { replace: true });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "登录失败");
     } finally {

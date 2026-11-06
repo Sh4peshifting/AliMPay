@@ -1,7 +1,7 @@
 import { ArrowRight, CheckCircle2, KeyRound, ScanLine, ShieldCheck, WalletCards } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import useSWR, { mutate } from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { apiFetch, jsonBody, swrFetcher } from "@/web/api";
 import { Button } from "@/web/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/web/components/ui/card";
@@ -11,6 +11,7 @@ import { Loading } from "@/web/components/ui/loading";
 
 export function SetupPage() {
   const navigate = useNavigate();
+  const { mutate } = useSWRConfig();
   const { data, isLoading } = useSWR<{ setup_completed: boolean }>("/admin-api/setup/status", swrFetcher);
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -19,7 +20,7 @@ export function SetupPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (isLoading) return <Loading label="正在检查系统状态" />;
-  if (data?.setup_completed) return <Navigate to="/login" replace />;
+  if (data?.setup_completed && !submitting) return <Navigate to="/login" replace />;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -31,8 +32,9 @@ export function SetupPage() {
     setSubmitting(true);
     try {
       await apiFetch("/admin-api/setup", { method: "POST", ...jsonBody({ password, public_base_url: baseUrl }) });
-      await mutate("/admin-api/setup/status");
-      await mutate("/admin-api/me");
+      const session = await apiFetch("/admin-api/me");
+      await mutate("/admin-api/me", session, { revalidate: false });
+      await mutate("/admin-api/setup/status", { setup_completed: true }, { revalidate: false });
       navigate("/dashboard", { replace: true });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "初始化失败");

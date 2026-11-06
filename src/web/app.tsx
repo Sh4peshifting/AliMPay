@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import useSWR from "swr";
 import { ApiClientError, swrFetcher } from "@/web/api";
 import { AppShell } from "@/web/components/app-shell";
@@ -16,9 +16,10 @@ import { SetupPage } from "@/web/pages/setup";
 import { SystemPage } from "@/web/pages/system";
 
 function RequireAdmin({ children }: { children: ReactNode }) {
+  const location = useLocation();
   const { data, error, isLoading } = useSWR<{ user: { username: string } }>("/admin-api/me", swrFetcher, { shouldRetryOnError: false });
   if (isLoading) return <Loading label="正在验证会话" />;
-  if (error instanceof ApiClientError && error.status === 401) return <Navigate to="/login" replace />;
+  if (error instanceof ApiClientError && error.status === 401) return <Navigate to="/login" state={{ from: `${location.pathname}${location.search}${location.hash}` }} replace />;
   if (error || !data) return <Navigate to="/login" replace />;
   return children;
 }
@@ -36,6 +37,7 @@ export function App() {
       <Route path="/setup" element={<SetupPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/checkout/:token" element={<CheckoutPage />} />
+      <Route path="/checkout/:token/success" element={<CheckoutPage successPage />} />
       <Route element={<RequireAdmin><AppShell /></RequireAdmin>}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/orders" element={<OrdersPage />} />

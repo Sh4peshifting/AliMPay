@@ -1,5 +1,6 @@
 import type { ApiVersion, CheckoutData, CollectionMode, OrderRecord, OrderStatus, TransferLinkLayer } from "../shared/contracts";
-import { getSetting, type AppDatabase } from "./db";
+import { isPaidStatus } from "../shared/contracts";
+import { audit, getSetting, type AppDatabase } from "./db";
 import { AppError, assert } from "./errors";
 import { centsToMoney, parseMoneyToCents, randomDigits, randomToken, validateCallbackUrl } from "./security";
 import { getRuntimeEnv } from "./env";
@@ -204,7 +205,7 @@ export function listOrders(database: AppDatabase, options: {
     where.push("status = ?");
     bindings.push(options.status);
   }
-  if (options.externalPaid === true) where.push("status IN ('paid', 'late_paid')");
+  if (options.externalPaid === true) where.push("status IN ('paid', 'late_paid', 'manual_paid')");
   if (options.externalPaid === false) where.push("status IN ('pending', 'expired')");
   if (options.pid) {
     where.push("pid = ?");
@@ -292,7 +293,37 @@ export function recordAndMatchPayment(database: AppDatabase, event: AccountLogEv
 }
 
 export function externalStatus(status: OrderStatus) {
-  return status === "paid" || status === "late_paid" ? 1 : 0;
+  return isPaidStatus(status) ? 1 : 0;
+}
+
+export function markOrderPaid(database: AppDatabase, id: string, actor: string, ip = "") {
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const order = getOrderById(database, id);
+    assert(order, 404, "ORDER_NOT_FOUND", "订单不存在");
+    if (isPaidStatus(order.status)) {
+      database.exec("COMMIT");
+      return { order, changed: false };
+    }
+    const now = new Date().toISOString();
+    database.query("UPDATE orders SET status = 'manual_paid', paid_at = ? WHERE id = ? AND status IN ('pending', 'expired')").run(now, id);
+    // Retain amount reservations until monitor_until, so a later bank entry
+    // cannot accidentally confirm another order with the same amount.
+    database.query(`
+      INSERT INTO notification_jobs(id, order_id, status, attempts, max_attempts, next_attempt_at, manual, created_at, updated_at)
+      VALUES (?, ?, 'pending', 0, 10, ?, 0, ?, ?)
+    `).run(crypto.randomUUID(), id, now, now, now);
+    audit(database, "order.manual_paid", {
+      actor, targetType: "order", targetId: id, ip,
+      details: { previous_status: order.status, payable_amount_cents: order.payable_amount_cents },
+    });
+    const updated = getOrderById(database, id)!;
+    database.exec("COMMIT");
+    return { order: updated, changed: true };
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function formatApiDate(value: string | null) {

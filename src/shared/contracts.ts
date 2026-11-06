@@ -1,7 +1,11 @@
 export type ApiVersion = "v1" | "v2";
 export type CollectionMode = "business_qr" | "transfer";
 export type TransferLinkLayer = 1 | 2 | 3;
-export type OrderStatus = "pending" | "expired" | "paid" | "late_paid";
+export type OrderStatus = "pending" | "expired" | "paid" | "late_paid" | "manual_paid";
+
+export function isPaidStatus(status: OrderStatus) {
+  return status === "paid" || status === "late_paid" || status === "manual_paid";
+}
 
 export const PAYMENT_POLL_INTERVAL_DEFAULT_SECONDS = 5;
 export const PAYMENT_POLL_INTERVAL_MIN_SECONDS = 1;

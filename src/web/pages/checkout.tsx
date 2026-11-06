@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import useSWR from "swr";
-import { PAYMENT_POLL_INTERVAL_DEFAULT_SECONDS, type CheckoutData } from "@/shared/contracts";
+import { PAYMENT_POLL_INTERVAL_DEFAULT_SECONDS, isPaidStatus, type CheckoutData } from "@/shared/contracts";
 import { ApiClientError, swrFetcher } from "@/web/api";
 import { Badge } from "@/web/components/ui/badge";
 import { Button } from "@/web/components/ui/button";
@@ -29,7 +29,8 @@ export function CheckoutPage({ successPage = false }: { successPage?: boolean })
   const mobileRedirectAttempted = useRef(false);
   const { data, error, isLoading } = useSWR<CheckoutData>(`/public-api/checkout/${encodeURIComponent(token)}`, swrFetcher, {
     refreshInterval: (latest) => {
-      if (latest && (["paid", "late_paid"].includes(latest.status) || Date.parse(latest.monitor_until) <= Date.now())) return 0;
+      if (latest && isPaidStatus(latest.status)) return 0;
+      if (latest && Date.parse(latest.monitor_until) <= Date.now()) return 30_000;
       return (latest?.payment_poll_interval_seconds ?? PAYMENT_POLL_INTERVAL_DEFAULT_SECONDS) * 1_000;
     },
     refreshWhenHidden: true,
@@ -62,7 +63,7 @@ export function CheckoutPage({ successPage = false }: { successPage?: boolean })
   }, [data]);
 
   useEffect(() => {
-    if (!successPage || !data?.return_target || !["paid", "late_paid"].includes(data.status)) return;
+    if (!successPage || !data?.return_target || !isPaidStatus(data.status)) return;
     const timer = window.setTimeout(() => window.location.replace(data.return_target!), 3_000);
     return () => window.clearTimeout(timer);
   }, [successPage, data?.status, data?.return_target]);
@@ -70,7 +71,7 @@ export function CheckoutPage({ successPage = false }: { successPage?: boolean })
   if (isLoading) return <Loading label="正在读取支付订单" />;
   if (!data) return <main className="flex min-h-screen items-center justify-center px-4"><div className="max-w-sm text-center"><TriangleAlert className="mx-auto size-9 text-destructive" /><h1 className="mt-4 text-xl font-semibold">{error instanceof ApiClientError && error.status === 404 ? "订单不存在" : "暂时无法读取订单"}</h1><p className="mt-2 text-sm text-muted">{error instanceof ApiClientError && error.status === 404 ? "链接可能无效，请检查支付地址。" : "请检查网络连接，页面会自动重试。"}</p></div></main>;
 
-  const paid = data.status === "paid" || data.status === "late_paid";
+  const paid = isPaidStatus(data.status);
   const checkoutExpired = now >= Date.parse(data.expires_at);
   const monitoringEnded = now >= Date.parse(data.monitor_until);
 

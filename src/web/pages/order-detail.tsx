@@ -2,10 +2,11 @@ import { ArrowLeft, RefreshCw, Send } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import useSWR from "swr";
 import { toast } from "sonner";
-import type { OrderRecord } from "@/shared/contracts";
+import { isPaidStatus, type OrderRecord } from "@/shared/contracts";
 import { apiFetch, swrFetcher } from "@/web/api";
 import { CopyButton } from "@/web/components/copy-button";
 import { PageHeader } from "@/web/components/page-header";
+import { MarkPaidButton } from "@/web/components/mark-paid-button";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Badge } from "@/web/components/ui/badge";
 import { Button } from "@/web/components/ui/button";
@@ -28,7 +29,7 @@ export function OrderDetailPage() {
   const { data, isLoading, mutate } = useSWR<DetailResponse>(`/admin-api/orders/${id}`, swrFetcher, { refreshInterval: 5_000 });
   if (isLoading || !data) return <Loading label="正在读取订单" />;
   const order = data.order;
-  const paid = order.status === "paid" || order.status === "late_paid";
+  const paid = isPaidStatus(order.status);
 
   return (
     <>
@@ -38,6 +39,7 @@ export function OrderDetailPage() {
         description={`商户订单号 ${order.out_trade_no}`}
         actions={
           <>
+            <MarkPaidButton order={order} />
             <Button variant="outline" onClick={async () => { await apiFetch("/admin-api/scans/run", { method: "POST" }); toast.success("扫描已完成"); await mutate(); }}><RefreshCw />立即扫描</Button>
             <Button disabled={!paid} onClick={async () => { await apiFetch(`/admin-api/orders/${id}/resend`, { method: "POST" }); toast.success("已加入一次性补发队列"); await mutate(); }}><Send />补发通知</Button>
           </>

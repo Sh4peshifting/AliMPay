@@ -6,9 +6,10 @@ const labels: Record<OrderStatus, string> = {
   expired: "已过期",
   paid: "支付成功",
   late_paid: "迟到支付",
+  manual_paid: "补单",
 };
 
 export function StatusBadge({ status }: { status: OrderStatus }) {
-  const variant = status === "paid" ? "success" : status === "late_paid" ? "primary" : status === "expired" ? "danger" : "outline";
+  const variant = status === "paid" || status === "manual_paid" ? "success" : status === "late_paid" ? "primary" : status === "expired" ? "danger" : "outline";
   return <Badge variant={variant}>{labels[status]}</Badge>;
 }

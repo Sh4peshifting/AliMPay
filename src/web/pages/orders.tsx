@@ -5,6 +5,7 @@ import useSWR from "swr";
 import type { OrderRecord, OrderStatus } from "@/shared/contracts";
 import { swrFetcher } from "@/web/api";
 import { PageHeader } from "@/web/components/page-header";
+import { MarkPaidButton } from "@/web/components/mark-paid-button";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import { Card, CardContent } from "@/web/components/ui/card";
@@ -65,7 +66,7 @@ export function OrdersPage() {
               onChange={(event) => { setStatus(event.target.value as OrderStatus | ""); setPage(1); }}
               aria-label="订单状态"
             >
-              <option value="">全部状态</option><option value="pending">等待支付</option><option value="expired">已过期</option><option value="paid">支付成功</option><option value="late_paid">迟到支付</option>
+              <option value="">全部状态</option><option value="pending">等待支付</option><option value="expired">已过期</option><option value="paid">支付成功</option><option value="late_paid">迟到支付</option><option value="manual_paid">补单</option>
             </select>
             </div>
             <div className="flex flex-wrap items-end gap-3">
@@ -81,7 +82,7 @@ export function OrdersPage() {
           {error ? <p role="alert" className="py-8 text-center text-sm text-destructive">{error instanceof Error ? error.message : "订单读取失败"}</p> : isLoading ? <Loading /> : !data?.data.length ? <div className="py-16 text-center text-sm text-muted">没有符合条件的订单</div> : (
             <div className="overflow-x-auto scrollbar-thin">
               <table className="w-full min-w-[900px] text-left text-sm">
-                <thead className="border-b text-xs text-muted"><tr><th className="pb-3 font-medium">平台订单号</th><th className="pb-3 font-medium">商户订单号</th><th className="pb-3 font-medium">接口</th><th className="pb-3 font-medium">金额</th><th className="pb-3 font-medium">实付</th><th className="pb-3 font-medium">状态</th><th className="pb-3 text-right font-medium">创建时间</th></tr></thead>
+                <thead className="border-b text-xs text-muted"><tr><th className="pb-3 font-medium">平台订单号</th><th className="pb-3 font-medium">商户订单号</th><th className="pb-3 font-medium">接口</th><th className="pb-3 font-medium">金额</th><th className="pb-3 font-medium">实付</th><th className="pb-3 font-medium">状态</th><th className="pb-3 text-right font-medium">创建时间</th><th className="pb-3 pl-4 text-right font-medium">操作</th></tr></thead>
                 <tbody className="divide-y">
                   {data?.data.map((order) => (
                     <tr key={order.id} className="hover:bg-foreground/[0.025]">
@@ -92,6 +93,7 @@ export function OrdersPage() {
                       <td className="py-3 font-mono">{formatMoney(order.payable_amount_cents)}</td>
                       <td className="py-3"><StatusBadge status={order.status} /></td>
                       <td className="py-3 text-right text-xs text-muted">{formatDate(order.created_at)}</td>
+                      <td className="py-3 pl-4 text-right"><MarkPaidButton order={order} /></td>
                     </tr>
                   ))}
                 </tbody>

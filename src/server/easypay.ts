@@ -138,11 +138,11 @@ function merchantStats(database: AppDatabase) {
   const yesterdayIso = new Date(Date.parse(todayIso) - 86_400_000).toISOString();
   const total = (database.query("SELECT COUNT(*) AS count FROM orders").get() as { count: number }).count;
   const today = database.query(`
-    SELECT COUNT(*) AS count, COALESCE(SUM(CASE WHEN status IN ('paid','late_paid') THEN requested_amount_cents ELSE 0 END), 0) AS cents
+    SELECT COUNT(*) AS count, COALESCE(SUM(CASE WHEN status IN ('paid','late_paid','manual_paid') THEN requested_amount_cents ELSE 0 END), 0) AS cents
     FROM orders WHERE created_at >= ?
   `).get(todayIso) as { count: number; cents: number };
   const yesterday = database.query(`
-    SELECT COUNT(*) AS count, COALESCE(SUM(CASE WHEN status IN ('paid','late_paid') THEN requested_amount_cents ELSE 0 END), 0) AS cents
+    SELECT COUNT(*) AS count, COALESCE(SUM(CASE WHEN status IN ('paid','late_paid','manual_paid') THEN requested_amount_cents ELSE 0 END), 0) AS cents
     FROM orders WHERE created_at >= ? AND created_at < ?
   `).get(yesterdayIso, todayIso) as { count: number; cents: number };
   return { total, today, yesterday };

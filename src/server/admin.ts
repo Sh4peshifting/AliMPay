@@ -31,7 +31,7 @@ import { audit, getSetting, setSetting, type AppDatabase } from "./db";
 import { getRuntimeEnv } from "./env";
 import { AppError, assert } from "./errors";
 import { notificationHistory, queueManualNotification } from "./notifications";
-import { getOrderById, listOrders } from "./orders";
+import { getOrderById, listOrders, markOrderPaid } from "./orders";
 import {
   generateRsaKeyPair,
   randomAlphaNumeric,
@@ -180,8 +180,8 @@ export function createAdminRoutes(database: AppDatabase, scanner: PaymentScanner
     const totals = database.query(`
       SELECT
         COUNT(*) AS today_order_count,
-        SUM(CASE WHEN status IN ('paid','late_paid') THEN 1 ELSE 0 END) AS today_paid_count,
-        COALESCE(SUM(CASE WHEN status IN ('paid','late_paid') THEN requested_amount_cents ELSE 0 END), 0) AS today_paid_cents
+        SUM(CASE WHEN status IN ('paid','late_paid','manual_paid') THEN 1 ELSE 0 END) AS today_paid_count,
+        COALESCE(SUM(CASE WHEN status IN ('paid','late_paid','manual_paid') THEN requested_amount_cents ELSE 0 END), 0) AS today_paid_cents
       FROM orders WHERE created_at >= ?
     `).get(today) as { today_order_count: number; today_paid_count: number; today_paid_cents: number };
     const statuses = database.query(`
@@ -209,7 +209,7 @@ export function createAdminRoutes(database: AppDatabase, scanner: PaymentScanner
 
   app.get("/orders", (c) => {
     const status = c.req.query("status") as OrderStatus | undefined;
-    if (status && !["pending", "expired", "paid", "late_paid"].includes(status)) {
+    if (status && !["pending", "expired", "paid", "late_paid", "manual_paid"].includes(status)) {
       throw new AppError(400, "INVALID_STATUS", "订单状态筛选值无效");
     }
     const page = Math.max(1, Number(c.req.query("page") ?? 1));
@@ -244,6 +244,10 @@ export function createAdminRoutes(database: AppDatabase, scanner: PaymentScanner
       ip: clientIp(c.req.raw.headers),
     });
     return c.json({ ok: true, job_id: id }, 202);
+  });
+
+  app.post("/orders/:id/mark-paid", (c) => {
+    return c.json(markOrderPaid(database, c.req.param("id"), c.get("admin").username, clientIp(c.req.raw.headers)));
   });
 
   app.post("/scans/run", async (c) => {

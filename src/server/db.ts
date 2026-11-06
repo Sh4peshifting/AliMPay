@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS orders (
   param TEXT NOT NULL DEFAULT '',
   client_ip TEXT NOT NULL DEFAULT '',
   checkout_token TEXT NOT NULL UNIQUE,
-  status TEXT NOT NULL CHECK(status IN ('pending', 'expired', 'paid', 'late_paid')),
+  status TEXT NOT NULL CHECK(status IN ('pending', 'expired', 'paid', 'late_paid', 'manual_paid')),
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   monitor_until TEXT NOT NULL,
@@ -190,6 +190,35 @@ export function createDatabase(path = getRuntimeEnv().databasePath): AppDatabase
     } catch (error) {
       database.exec("ROLLBACK");
       throw error;
+    }
+  }
+  if (!database.query("SELECT 1 FROM schema_migrations WHERE version = 3").get()) {
+    // SQLite CHECK constraints require rebuilding the table. Keep child rows and
+    // their foreign keys intact by disabling enforcement outside the transaction.
+    database.exec("PRAGMA foreign_keys = OFF");
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      const { sql } = database.query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get() as { sql: string };
+      if (!sql.includes("'manual_paid'")) {
+        const replacement = sql
+          .replace(/^CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`]?orders["`]?\s*\(/i, "CREATE TABLE orders_v3 (")
+          .replace("'late_paid'", "'late_paid', 'manual_paid'");
+        database.exec(replacement);
+        database.exec("INSERT INTO orders_v3 SELECT * FROM orders");
+        database.exec("DROP TABLE orders");
+        database.exec("ALTER TABLE orders_v3 RENAME TO orders");
+        database.exec("CREATE INDEX idx_orders_status_monitor ON orders(status, monitor_until)");
+        database.exec("CREATE INDEX idx_orders_created ON orders(created_at DESC)");
+        database.exec("CREATE INDEX idx_orders_out_trade_no ON orders(out_trade_no)");
+      }
+      if (database.query("PRAGMA foreign_key_check").all().length) throw new Error("订单状态迁移失败：外键校验未通过");
+      database.query("INSERT INTO schema_migrations(version, applied_at) VALUES (3, ?)").run(now);
+      database.exec("COMMIT");
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    } finally {
+      database.exec("PRAGMA foreign_keys = ON");
     }
   }
   const insert = database.query("INSERT OR IGNORE INTO settings(key, value_json, is_secret, updated_at) VALUES (?, ?, 0, ?)");

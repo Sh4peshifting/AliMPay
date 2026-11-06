@@ -96,6 +96,19 @@ test("first-run setup, key generation, QR upload and public checkout", async ({ 
   await expect(page.getByRole("heading", { name: "¥1.01" })).toBeVisible({ timeout: 12_000 });
   await expect(page.getByAltText("支付宝经营码")).toBeVisible();
   await expect(page.getByRole("link", { name: "打开支付宝扫一扫" })).toHaveAttribute("href", "alipays://platformapi/startapp?saId=10000007");
+
+  await page.goto("/orders");
+  const row = page.getByRole("row").filter({ hasText: unsigned.out_trade_no });
+  await row.getByRole("button", { name: "补单", exact: true }).click();
+  await expect(page.getByRole("dialog").getByText(unsigned.out_trade_no, { exact: true })).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "确认已收款" }).click();
+  await expect(row.getByText("补单", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: "补单", exact: true })).toHaveCount(0);
+  await page.route("https://8.8.8.8/return**", (route) => route.fulfill({ contentType: "text/html", body: "Merchant success" }));
+  await page.goto(order.payurl);
+  await expect(page).toHaveURL(/\/checkout\/[^/]+\/success$/);
+  await expect(page.getByRole("heading", { name: "已收到 ¥1.01" })).toBeVisible();
+  await expect(page).toHaveURL(/^https:\/\/8\.8\.8\.8\/return\?/);
 });
 
 test("mobile navigation is usable and transfer checkout opens Alipay", async ({ page }, testInfo) => {

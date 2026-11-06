@@ -20,7 +20,7 @@ test("login replaces a cached unauthorized session and restores the requested pa
   await expect(page.getByRole("heading", { name: "订单", exact: true })).toBeVisible();
 });
 
-for (const status of ["paid", "late_paid"] as const) {
+for (const status of ["paid", "late_paid", "manual_paid"] as const) {
   test(`${status} checkout recovers from an API error, shows success and returns to the merchant`, async ({ page }) => {
     let requests = 0;
     const checkout: CheckoutData = {

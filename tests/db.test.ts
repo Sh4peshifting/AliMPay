@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDatabase, getSetting, type AppDatabase } from "../src/server/db";
+import { createOrder, getActiveOrders, getOrderById, markOrderPaid, recordAndMatchPayment } from "../src/server/orders";
+import { configuredDatabase, orderInput } from "./helpers";
 
 let directory = "";
 const opened: AppDatabase[] = [];
@@ -49,5 +51,39 @@ describe("database settings migrations", () => {
     const database = createDatabase(join(directory, "fresh.sqlite"));
     opened.push(database);
     expect(getSetting(database, "transfer_link_layer", 0)).toBe(2);
+  });
+
+  it("migrates the old order CHECK constraint without losing orders or child records", () => {
+    directory = mkdtempSync(join(tmpdir(), "alimpay-db-test-"));
+    const path = join(directory, "orders-v2.sqlite");
+    const { database: source } = configuredDatabase();
+    const paid = createOrder(source, orderInput(1)).order;
+    const pending = createOrder(source, orderInput(2)).order;
+    recordAndMatchPayment(source, {
+      accountLogId: "MIGRATION-LOG", occurredAt: new Date().toISOString(), direction: "收入", amountCents: paid.payable_amount_cents,
+      alipayOrderNo: "MIGRATION-ALI", transMemo: "", otherAccount: "buyer", raw: {},
+    }, getActiveOrders(source));
+    writeFileSync(path, source.serialize());
+    source.close();
+    const legacy = new Database(path);
+    const { sql } = legacy.query("SELECT sql FROM sqlite_master WHERE name = 'orders'").get() as { sql: string };
+    legacy.exec(sql.replace("CREATE TABLE orders", "CREATE TABLE orders_legacy").replace(", 'manual_paid'", ""));
+    legacy.exec("INSERT INTO orders_legacy SELECT * FROM orders; DROP TABLE orders; ALTER TABLE orders_legacy RENAME TO orders; DELETE FROM schema_migrations WHERE version = 3");
+    legacy.close();
+
+    const migrated = createDatabase(path);
+    expect(getOrderById(migrated, paid.id)?.status).toBe("paid");
+    expect(migrated.query("SELECT matched_order_id FROM payment_events").get()).toEqual({ matched_order_id: paid.id });
+    expect(migrated.query("SELECT order_id FROM notification_jobs").get()).toEqual({ order_id: paid.id });
+    expect(migrated.query("SELECT COUNT(*) AS n FROM amount_reservations").get()).toEqual({ n: 2 });
+    expect(migrated.query("PRAGMA foreign_key_check").all()).toEqual([]);
+    expect(migrated.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
+    expect(markOrderPaid(migrated, pending.id, "admin").order.status).toBe("manual_paid");
+    migrated.close();
+
+    const reopened = createDatabase(path);
+    opened.push(reopened);
+    expect(getOrderById(reopened, pending.id)?.status).toBe("manual_paid");
+    expect(reopened.query("SELECT COUNT(*) AS n FROM notification_jobs").get()).toEqual({ n: 2 });
   });
 });

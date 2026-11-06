@@ -1,4 +1,5 @@
 import type { ApiVersion, OrderRecord } from "../shared/contracts";
+import { isPaidStatus } from "../shared/contracts";
 import { getSecret } from "./config";
 import { getSetting, type AppDatabase } from "./db";
 import { getRuntimeEnv } from "./env";
@@ -50,14 +51,14 @@ export function buildSignedCallbackUrl(database: AppDatabase, order: OrderRecord
 }
 
 export function buildSignedReturnUrl(database: AppDatabase, order: OrderRecord) {
-  if (!order.return_url || (order.status !== "paid" && order.status !== "late_paid")) return null;
+  if (!order.return_url || !isPaidStatus(order.status)) return null;
   return buildSignedCallbackUrl(database, order, order.return_url);
 }
 
 export function queueManualNotification(database: AppDatabase, orderId: string) {
   const order = getOrderById(database, orderId);
   if (!order) throw new AppError(404, "ORDER_NOT_FOUND", "订单不存在");
-  if (order.status !== "paid" && order.status !== "late_paid") {
+  if (!isPaidStatus(order.status)) {
     throw new AppError(409, "ORDER_NOT_PAID", "只有已支付订单可以补发通知");
   }
   const now = new Date().toISOString();

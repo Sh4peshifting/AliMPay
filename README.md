@@ -18,6 +18,10 @@
 - 支付通知首次立即发送，失败后每 60 秒一次，自动任务最多 10 次
 - 独立密钥中心：支付宝应用、V1、V2 平台、V2 商户四个信任方向不复用密钥
 - 订单、支付流水、扫描运行、通知尝试和后台操作审计
+- 订单按 UTC+8 起止时间筛选；汇总时段内支付成功、迟到支付和补单的实收金额与商户金额
+- 管理员可将未支付订单手动确认为“补单”，保留审计并按正常支付流程通知商户
+- 登录后恢复原后台页面；支付确认后进入成功页，3 秒后自动返回商户签名地址
+- 经营码收银台支持一键打开支付宝扫一扫（issue #1）
 - Docker/Compose、健康检查、桌面与移动端界面
 
 不实现退款、代付、关单、结算和多商户。旧 PHP 版本的数据不会自动迁移。
@@ -62,7 +66,7 @@ openssl rand -base64 32
 下面以 Linux、代码目录 `/opt/AliMPay`、监听 `127.0.0.1:3000` 为例。先安装 Bun 1.3 或更高版本，然后执行：
 
 ```bash
-git clone https://github.com/MiaM1ku/AliMPay.git /opt/AliMPay
+git clone https://github.com/Sh4peshifting/AliMPay.git /opt/AliMPay
 cd /opt/AliMPay
 bun install --frozen-lockfile
 cp .env.example .env
@@ -144,6 +148,37 @@ server {
 ```
 
 无论直接运行还是使用 Compose，都应把 `data` 目录放在持久磁盘并纳入备份。
+
+## GitHub Actions 镜像
+
+CI 会先运行类型检查、单元/接口测试和桌面/移动端浏览器测试，再构建 Docker 镜像并检查容器健康接口与前端。向 `main` 推送、推送 `v*` 标签或在 `main` 手动运行 CI 时，会发布 Linux `amd64`、`arm64` 镜像到 GitHub Container Registry：
+
+```text
+ghcr.io/sh4peshifting/alimpay:latest
+ghcr.io/sh4peshifting/alimpay:main
+ghcr.io/sh4peshifting/alimpay:sha-<commit>
+```
+
+`v1.2.3` 之类的标签还会生成 `1.2.3` 镜像标签。PR 和普通开发分支只验证构建，不发布镜像。工作流使用仓库自带的 `GITHUB_TOKEN`，不需要 Docker Hub 密码；fork 后会自动使用新仓库的小写命名空间。
+
+若使用预构建镜像，在 `.env` 中设置 `ALIMPAY_IMAGE=ghcr.io/sh4peshifting/alimpay:latest`，然后运行：
+
+```bash
+docker compose pull
+docker compose up -d --no-build
+```
+
+GHCR 首次发布的包默认私有；如需匿名拉取，在 GitHub 包设置中将可见性设为 Public，或先执行 `docker login ghcr.io`。
+
+## 订单筛选与补单
+
+- 起止时间按 UTC+8 输入，筛选订单的**创建时间**，包含起止时刻；任意一端可留空。
+- “成功实收”累计 `paid`、`late_paid`、`manual_paid` 的应付金额，包含经营码分位加价；“商户金额合计”累计这些订单的原始下单金额。统计覆盖整个所选时段，不受搜索关键词、状态筛选或当前页影响。
+- 在订单列表或详情点击“补单”，核对订单号和应收金额后确认。待支付、已过期（包括自动监控结束）的订单均可补单；已支付订单重复确认不会更改原状态或创建重复通知。
+- 补单状态名为“补单”（`manual_paid`），对 V1/V2 查询、同步返回和异步通知均视为支付成功。系统记录操作者、原状态和确认时间，不会伪造支付宝流水号。
+- 升级时会自动迁移订单状态约束，保留订单、支付流水、金额预留和通知记录。升级前按下文备份数据库及主密钥。
+
+支付确认后会进入独立的成功页；有 `return_url` 的订单 3 秒后自动返回带签名的商户地址，没有返回地址时停留在成功页。临时网络错误会自动重试；自动监控结束后仍每 30 秒查询本地状态，以便显示后续补单结果，不会延长支付宝扫账窗口。
 
 ## 首次配置顺序
 
@@ -242,7 +277,7 @@ bunx playwright install chromium
 bun run test:e2e
 ```
 
-单元与契约测试覆盖 V1/V2 签名、订单幂等、金额分配、5/10 分钟状态机、账务流水去重、共享扫描、通知十次重试、会话与 CSRF、SSRF，以及桌面首次配置和移动端页面。
+单元与契约测试覆盖 V1/V2 签名、订单幂等、金额分配、5/10 分钟状态机、账务流水去重、共享扫描、通知十次重试、会话与 CSRF、SSRF、时间边界筛选、跨页金额汇总、补单幂等和数据库迁移。浏览器测试覆盖首次配置、缓存过期后的登录跳转、三种支付成功状态的自动返回、网络错误恢复、时间筛选、补单确认和移动端支付宝跳转。
 
 ## 健康检查
 

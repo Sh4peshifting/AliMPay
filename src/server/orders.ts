@@ -186,10 +186,20 @@ export function listOrders(database: AppDatabase, options: {
   limit?: number;
   offset?: number;
   pid?: string;
+  startTime?: string;
+  endTime?: string;
 } = {}) {
   expireOrders(database);
   const where: string[] = [];
   const bindings: Array<string | number> = [];
+  if (options.startTime) {
+    where.push("created_at >= ?");
+    bindings.push(options.startTime);
+  }
+  if (options.endTime) {
+    where.push("created_at <= ?");
+    bindings.push(options.endTime);
+  }
   if (options.status) {
     where.push("status = ?");
     bindings.push(options.status);
@@ -201,8 +211,8 @@ export function listOrders(database: AppDatabase, options: {
     bindings.push(options.pid);
   }
   if (options.query) {
-    where.push("(trade_no LIKE ? OR out_trade_no LIKE ? OR name LIKE ?)");
-    const like = `%${options.query.replace(/[%_]/g, "\\$&")}%`;
+    where.push("(trade_no LIKE ? ESCAPE '\\' OR out_trade_no LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')");
+    const like = `%${options.query.replace(/[\\%_]/g, "\\$&")}%`;
     bindings.push(like, like, like);
   }
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";

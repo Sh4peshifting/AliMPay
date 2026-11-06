@@ -92,6 +92,13 @@ function imageType(buffer: Uint8Array) {
   throw new AppError(400, "INVALID_QR_IMAGE", "仅支持真实的 PNG、JPEG 或 WebP 图片");
 }
 
+function orderTime(value: string | undefined) {
+  if (!value) return undefined;
+  const parsed = z.iso.datetime({ offset: true }).safeParse(value);
+  assert(parsed.success, 400, "INVALID_ORDER_TIME", "筛选时间必须包含时区且为有效日期");
+  return new Date(parsed.data).toISOString();
+}
+
 export function createAdminRoutes(database: AppDatabase, scanner: PaymentScanner) {
   const app = new Hono<{ Variables: AuthVariables }>();
 
@@ -207,8 +214,13 @@ export function createAdminRoutes(database: AppDatabase, scanner: PaymentScanner
     }
     const page = Math.max(1, Number(c.req.query("page") ?? 1));
     const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 20)));
+    const startTime = orderTime(c.req.query("start_time"));
+    const endTime = orderTime(c.req.query("end_time"));
+    assert(!startTime || !endTime || startTime <= endTime, 400, "INVALID_TIME_RANGE", "起始时间不能晚于结束时间");
     const result = listOrders(database, {
       status,
+      startTime,
+      endTime,
       query: c.req.query("q")?.trim(),
       limit,
       offset: (page - 1) * limit,

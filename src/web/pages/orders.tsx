@@ -10,6 +10,7 @@ import { Button } from "@/web/components/ui/button";
 import { Card, CardContent } from "@/web/components/ui/card";
 import { Input } from "@/web/components/ui/input";
 import { Loading } from "@/web/components/ui/loading";
+import { Label } from "@/web/components/ui/label";
 import { formatDate, formatMoney } from "@/web/lib/utils";
 
 interface OrdersResponse {
@@ -24,12 +25,28 @@ export function OrdersPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<OrderStatus | "">("");
   const [page, setPage] = useState(1);
-  const path = `/admin-api/orders?page=${page}&limit=20&status=${encodeURIComponent(status)}&q=${encodeURIComponent(query)}`;
-  const { data, isLoading } = useSWR<OrdersResponse>(path, swrFetcher, { refreshInterval: 5_000 });
+  const [startInput, setStartInput] = useState("");
+  const [endInput, setEndInput] = useState("");
+  const [range, setRange] = useState({ start: "", end: "" });
+  const [rangeError, setRangeError] = useState("");
+  const params = new URLSearchParams({ page: String(page), limit: "20", status, q: query });
+  if (range.start) params.set("start_time", range.start);
+  if (range.end) params.set("end_time", range.end);
+  const path = `/admin-api/orders?${params}`;
+  const { data, error, isLoading } = useSWR<OrdersResponse>(path, swrFetcher, { refreshInterval: 5_000 });
   const pages = Math.max(1, Math.ceil((data?.total ?? 0) / 20));
 
   function search(event: FormEvent) {
     event.preventDefault();
+    const asUtc = (value: string) => value ? new Date(`${value}+08:00`).toISOString() : "";
+    const start = asUtc(startInput);
+    const end = asUtc(endInput);
+    if (start && end && start > end) {
+      setRangeError("起始时间不能晚于结束时间");
+      return;
+    }
+    setRangeError("");
+    setRange({ start, end });
     setPage(1);
     setQuery(queryInput.trim());
   }
@@ -39,11 +56,9 @@ export function OrdersPage() {
       <PageHeader title="订单" description="查询商户订单、支付匹配结果和通知投递记录。" />
       <Card>
         <CardContent className="pt-5">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row">
-            <form className="flex flex-1 gap-2" onSubmit={search}>
+          <form className="mb-5 space-y-3" onSubmit={search}>
+            <div className="flex flex-col gap-3 sm:flex-row">
               <Input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="平台订单号、商户订单号或商品名称" aria-label="搜索订单" />
-              <Button type="submit" variant="outline"><Search />搜索</Button>
-            </form>
             <select
               className="h-9 rounded-md border bg-transparent px-3 text-sm"
               value={status}
@@ -52,9 +67,18 @@ export function OrdersPage() {
             >
               <option value="">全部状态</option><option value="pending">等待支付</option><option value="expired">已过期</option><option value="paid">支付成功</option><option value="late_paid">迟到支付</option>
             </select>
-          </div>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-0 flex-1 space-y-2"><Label htmlFor="order-start">起始时间（UTC+8）</Label><Input id="order-start" type="datetime-local" step="1" value={startInput} onChange={(event) => setStartInput(event.target.value)} /></div>
+              <div className="min-w-0 flex-1 space-y-2"><Label htmlFor="order-end">结束时间（UTC+8）</Label><Input id="order-end" type="datetime-local" step="1" value={endInput} onChange={(event) => setEndInput(event.target.value)} /></div>
+              <Button type="submit" variant="outline"><Search />筛选</Button>
+              <Button type="button" variant="ghost" onClick={() => { setStartInput(""); setEndInput(""); setRange({ start: "", end: "" }); setRangeError(""); setQueryInput(""); setQuery(""); setStatus(""); setPage(1); }}>重置</Button>
+            </div>
+            <p className="text-xs text-muted">按订单创建时间筛选，可只填写一端；包含起止时刻。</p>
+            {rangeError ? <p role="alert" className="text-sm text-destructive">{rangeError}</p> : null}
+          </form>
 
-          {isLoading ? <Loading /> : !data?.data.length ? <div className="py-16 text-center text-sm text-muted">没有符合条件的订单</div> : (
+          {error ? <p role="alert" className="py-8 text-center text-sm text-destructive">{error instanceof Error ? error.message : "订单读取失败"}</p> : isLoading ? <Loading /> : !data?.data.length ? <div className="py-16 text-center text-sm text-muted">没有符合条件的订单</div> : (
             <div className="overflow-x-auto scrollbar-thin">
               <table className="w-full min-w-[900px] text-left text-sm">
                 <thead className="border-b text-xs text-muted"><tr><th className="pb-3 font-medium">平台订单号</th><th className="pb-3 font-medium">商户订单号</th><th className="pb-3 font-medium">接口</th><th className="pb-3 font-medium">金额</th><th className="pb-3 font-medium">实付</th><th className="pb-3 font-medium">状态</th><th className="pb-3 text-right font-medium">创建时间</th></tr></thead>

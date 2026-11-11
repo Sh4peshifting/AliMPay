@@ -42,6 +42,7 @@ export function getPublicSettings(database: AppDatabase): PublicSettings {
     transfer_link_layer: getSetting<TransferLinkLayer>(database, "transfer_link_layer", 2),
     payment_poll_interval_seconds: getPaymentPollIntervalSeconds(database),
     business_qr_url: getSetting(database, "business_qr_url", ""),
+    business_qr_content: getSetting(database, "business_qr_content", ""),
     alipay_app_id: getSetting(database, "alipay_app_id", ""),
     alipay_endpoint: getSetting(database, "alipay_endpoint", "https://openapi.alipay.com"),
     alipay_configured: Boolean(

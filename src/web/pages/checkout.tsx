@@ -10,6 +10,8 @@ import { Button } from "@/web/components/ui/button";
 import { Card, CardContent } from "@/web/components/ui/card";
 import { Loading } from "@/web/components/ui/loading";
 import { formatDate } from "@/web/lib/utils";
+import { decodeQrImage, qrImageUrl } from "@/web/lib/qr-code";
+import { createBusinessQrUri } from "@/shared/business-qr";
 
 function countdown(milliseconds: number) {
   const seconds = Math.max(0, Math.ceil(milliseconds / 1_000));
@@ -45,6 +47,13 @@ export function CheckoutPage({ successPage = false }: { successPage?: boolean })
     data?.collection_mode === "transfer" && data.payment_uri ? ["transfer-qr", data.payment_uri] : null,
     ([, uri]) => QRCode.toDataURL(uri, { width: 300, margin: 2, errorCorrectionLevel: "M", color: { dark: "#0f172a", light: "#f8fafc" } }),
   );
+  const { data: decodedBusinessUri, isLoading: decodingBusinessQr } = useSWR(
+    data?.collection_mode === "business_qr" && !data.payment_uri && data.business_qr_url && !isPaidStatus(data.status) && Date.parse(data.expires_at) > now
+      ? ["business-qr-uri", data.business_qr_url] : null,
+    async ([, url]) => createBusinessQrUri(await decodeQrImage(url)),
+    { shouldRetryOnError: false, revalidateOnFocus: false, revalidateOnReconnect: false },
+  );
+  const paymentUri = data?.payment_uri || decodedBusinessUri || "";
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -108,10 +117,10 @@ export function CheckoutPage({ successPage = false }: { successPage?: boolean })
               {data.payable_money !== data.requested_money ? <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm leading-6"><span className="font-semibold">请按显示金额准确支付。</span> 商户金额为 ¥{data.requested_money}，系统为本订单分配了唯一分位金额。</div> : null}
 
               <div className="mt-6 flex min-h-[300px] items-center justify-center rounded-lg border p-5">
-                {data.collection_mode === "business_qr" ? <img src={data.business_qr_url} alt="支付宝经营码" className="max-h-[270px] max-w-full object-contain" /> : generatedQr ? <img src={generatedQr} alt="支付宝转账二维码" className="size-[270px] max-w-full object-contain" /> : <Loading label="正在生成二维码" />}
+                {data.collection_mode === "business_qr" ? <img src={data.business_qr_url ? qrImageUrl(data.business_qr_url) : undefined} alt="支付宝经营码" className="max-h-[270px] max-w-full object-contain" /> : generatedQr ? <img src={generatedQr} alt="支付宝转账二维码" className="size-[270px] max-w-full object-contain" /> : <Loading label="正在生成二维码" />}
               </div>
-              {data.payment_uri && !checkoutExpired ? <Button className="mt-4 w-full" asChild><a href={data.payment_uri}>{data.collection_mode === "business_qr" ? "打开支付宝扫一扫" : "打开支付宝"}<ExternalLink /></a></Button> : null}
-              <div className="mt-5 flex items-start gap-3 text-sm leading-6 text-muted"><ShieldCheck className="mt-0.5 size-5 shrink-0 text-success" /><p>{data.collection_mode === "business_qr" ? "打开支付宝扫描经营码，并手动输入上方精确金额。" : `打开支付宝扫码转账；备注必须保持为 ${data.out_trade_no}，不要修改。`}</p></div>
+              {paymentUri && !checkoutExpired ? <Button className="mt-4 w-full" asChild><a href={paymentUri}>{data.collection_mode === "business_qr" ? "打开支付宝付款" : "打开支付宝"}<ExternalLink /></a></Button> : decodingBusinessQr && !checkoutExpired ? <Button className="mt-4 w-full" disabled>正在读取付款链接…</Button> : null}
+              <div className="mt-5 flex items-start gap-3 text-sm leading-6 text-muted"><ShieldCheck className="mt-0.5 size-5 shrink-0 text-success" /><p>{data.collection_mode === "business_qr" ? paymentUri ? "点击“打开支付宝付款”直达经营码收款页，并按上方精确金额付款。" : "长按保存经营码，在支付宝扫一扫的相册中选择该图片，并输入上方精确金额。" : `打开支付宝扫码转账；备注必须保持为 ${data.out_trade_no}，不要修改。`}</p></div>
               {checkoutExpired ? <div className="mt-4 flex gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs leading-5 text-muted"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />5 分钟下单时间已过。如果你已经发起付款，请等待确认；系统会监控到 {formatDate(data.monitor_until)}。如果尚未付款，请返回商户重新下单。</div> : null}
             </CardContent>
           </Card>

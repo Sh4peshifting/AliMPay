@@ -154,6 +154,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   transfer_link_layer: 2,
   payment_poll_interval_seconds: PAYMENT_POLL_INTERVAL_DEFAULT_SECONDS,
   business_qr_url: "",
+  business_qr_content: "",
   alipay_app_id: "",
   alipay_endpoint: "https://openapi.alipay.com",
   alipay_public_key: "",

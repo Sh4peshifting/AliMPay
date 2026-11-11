@@ -1,5 +1,6 @@
 import type { ApiVersion, CheckoutData, CollectionMode, OrderRecord, OrderStatus, PaidOrderSummary, TransferLinkLayer } from "../shared/contracts";
 import { isPaidStatus } from "../shared/contracts";
+import { createBusinessQrUri } from "../shared/business-qr";
 import { audit, getSetting, type AppDatabase } from "./db";
 import { AppError, assert } from "./errors";
 import { centsToMoney, parseMoneyToCents, randomDigits, randomToken, validateCallbackUrl } from "./security";
@@ -438,7 +439,7 @@ export function getCheckoutData(database: AppDatabase, token: string, signedRetu
     expires_at: order.expires_at,
     monitor_until: order.monitor_until,
     payment_poll_interval_seconds: getPaymentPollIntervalSeconds(database),
-    payment_uri: order.collection_mode === "transfer" ? createTransferUri(order, transferUserId, transferLinkLayer) : "alipays://platformapi/startapp?saId=10000007",
+    payment_uri: order.collection_mode === "transfer" ? createTransferUri(order, transferUserId, transferLinkLayer) : createBusinessQrUri(getSetting(database, "business_qr_content", "")),
     business_qr_url: businessQrUrl,
     return_url: order.return_url,
     return_target: signedReturnUrl ?? null,

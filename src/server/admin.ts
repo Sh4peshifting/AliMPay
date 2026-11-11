@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
+import { normalizeBusinessQrContent } from "../shared/business-qr";
 import {
   PAYMENT_POLL_INTERVAL_MAX_SECONDS,
   PAYMENT_POLL_INTERVAL_MIN_SECONDS,
@@ -273,10 +274,16 @@ export function createAdminRoutes(database: AppDatabase, scanner: PaymentScanner
     const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
     const allowed = new Set([
       "public_base_url", "collection_mode", "transfer_user_id", "alipay_app_id",
-      "transfer_link_layer", "payment_poll_interval_seconds", "alipay_endpoint", "alipay_public_key", "v1_enabled", "v2_enabled",
+      "transfer_link_layer", "payment_poll_interval_seconds", "alipay_endpoint", "alipay_public_key", "v1_enabled", "v2_enabled", "business_qr_content",
     ]);
     for (const key of Object.keys(body)) {
       if (!allowed.has(key)) throw new AppError(400, "UNKNOWN_SETTING", `不支持设置项 ${key}`);
+    }
+    if (body.business_qr_content !== undefined) {
+      assert(typeof body.business_qr_content === "string", 400, "INVALID_BUSINESS_QR_CONTENT", "经营码付款链接格式错误");
+      const content = normalizeBusinessQrContent(body.business_qr_content);
+      assert(!body.business_qr_content.trim() || content, 400, "INVALID_BUSINESS_QR_CONTENT", "经营码付款链接必须是 qr.alipay.com 的有效地址");
+      setSetting(database, "business_qr_content", content);
     }
     if (typeof body.public_base_url === "string") setSetting(database, "public_base_url", validatePublicBaseUrl(body.public_base_url));
     if (body.collection_mode === "business_qr" || body.collection_mode === "transfer") setSetting(database, "collection_mode", body.collection_mode);
@@ -331,14 +338,18 @@ export function createAdminRoutes(database: AppDatabase, scanner: PaymentScanner
     assert(file.size > 0 && file.size <= 5 * 1024 * 1024, 400, "QR_FILE_SIZE", "二维码图片必须小于 5MB");
     const bytes = new Uint8Array(await file.arrayBuffer());
     const detected = imageType(bytes);
+    const rawContent = typeof body.qr_content === "string" ? body.qr_content : "";
+    const content = normalizeBusinessQrContent(rawContent);
+    assert(!rawContent.trim() || content, 400, "INVALID_BUSINESS_QR_CONTENT", "图片中的二维码不是有效的支付宝经营码付款链接");
     const hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex").slice(0, 16);
     mkdirSync(getRuntimeEnv().uploadDir, { recursive: true });
     const filename = `business-qr-${hash}.${detected.ext}`;
     await Bun.write(resolve(getRuntimeEnv().uploadDir, filename), bytes);
     const url = `${getSetting(database, "public_base_url", "").replace(/\/$/, "")}/uploads/${filename}`;
     setSetting(database, "business_qr_url", url);
+    setSetting(database, "business_qr_content", content);
     audit(database, "settings.qr_upload", { actor: c.get("admin").username, details: { filename, mime: detected.mime, size: file.size } });
-    return c.json({ ok: true, url });
+    return c.json({ ok: true, url, qr_content: content });
   });
 
   app.post("/keys/alipay/generate", (c) => {

@@ -112,10 +112,15 @@ describe("payment state machine", () => {
     expect(getCheckoutData(database, order.checkout_token)?.payment_poll_interval_seconds).toBe(12);
   });
 
-  it("opens Alipay Scan for business QR checkout (issue #1)", () => {
+  it("opens the merchant QR scan result instead of an empty scanner", () => {
     ({ database } = configuredDatabase());
     const order = createOrder(database, orderInput(1)).order;
-    expect(getCheckoutData(database, order.checkout_token)?.payment_uri).toBe("alipays://platformapi/startapp?saId=10000007");
+    const uri = new URL(getCheckoutData(database, order.checkout_token)!.payment_uri);
+    expect(uri.protocol).toBe("alipays:");
+    expect(uri.searchParams.get("saId")).toBe("10000007");
+    expect(uri.searchParams.get("qrcode")).toBe("https://qr.alipay.com/fkx-test-merchant");
+    setSetting(database, "business_qr_content", "");
+    expect(getCheckoutData(database, order.checkout_token)?.payment_uri).toBe("");
   });
 
   it("maps expired to unpaid and late paid to paid externally", () => {

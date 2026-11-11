@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
+import QRCode from "qrcode";
 
 function md5(parameters: Record<string, string>, key: string) {
   const canonical = Object.entries(parameters)
@@ -60,9 +61,10 @@ test("first-run setup, key generation, QR upload and public checkout", async ({ 
   await page.getByLabel("经营码图片").setInputFiles({
     name: "business-qr.png",
     mimeType: "image/png",
-    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"),
+    buffer: await QRCode.toBuffer("https://qr.alipay.com/FKX-E2E-MERCHANT", { width: 360, margin: 4 }),
   });
   await expect(page.getByText("已上传", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("经营码付款链接")).toHaveValue("https://qr.alipay.com/FKX-E2E-MERCHANT");
   await page.getByRole("button", { name: /保存全部配置/ }).click();
   await expect(page.getByText("配置已保存")).toBeVisible();
   await page.reload();
@@ -95,7 +97,9 @@ test("first-run setup, key generation, QR upload and public checkout", async ({ 
   await page.goto(order.payurl);
   await expect(page.getByRole("heading", { name: "¥1.01" })).toBeVisible({ timeout: 12_000 });
   await expect(page.getByAltText("支付宝经营码")).toBeVisible();
-  await expect(page.getByRole("link", { name: "打开支付宝扫一扫" })).toHaveAttribute("href", "alipays://platformapi/startapp?saId=10000007");
+  const paymentLink = page.getByRole("link", { name: "打开支付宝付款" });
+  await expect(paymentLink).toBeVisible();
+  expect(new URL((await paymentLink.getAttribute("href"))!).searchParams.get("qrcode")).toBe("https://qr.alipay.com/FKX-E2E-MERCHANT");
 
   await page.goto("/orders");
   const row = page.getByRole("row").filter({ hasText: unsigned.out_trade_no });

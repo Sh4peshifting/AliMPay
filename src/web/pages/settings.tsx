@@ -20,6 +20,8 @@ import { Loading } from "@/web/components/ui/loading";
 import { Switch } from "@/web/components/ui/switch";
 import { Textarea } from "@/web/components/ui/textarea";
 import { cn } from "@/web/lib/utils";
+import { decodeQrImage, qrImageUrl } from "@/web/lib/qr-code";
+import { normalizeBusinessQrContent } from "@/shared/business-qr";
 
 interface SettingsData extends PublicSettings {
   transfer_user_id: string;
@@ -31,6 +33,8 @@ interface SettingsData extends PublicSettings {
 
 function SettingsForm({ initial, refresh }: { initial: SettingsData; refresh: () => Promise<unknown> }) {
   const [mode, setMode] = useState<CollectionMode>(initial.collection_mode);
+  const [businessQrContent, setBusinessQrContent] = useState(initial.business_qr_content);
+  const [readingQr, setReadingQr] = useState(false);
   const [baseUrl, setBaseUrl] = useState(initial.public_base_url);
   const [transferUserId, setTransferUserId] = useState(initial.transfer_user_id);
   const [transferLinkLayer, setTransferLinkLayer] = useState<TransferLinkLayer>(initial.transfer_link_layer);
@@ -51,6 +55,7 @@ function SettingsForm({ initial, refresh }: { initial: SettingsData; refresh: ()
         ...jsonBody({
           public_base_url: baseUrl,
           collection_mode: mode,
+          business_qr_content: businessQrContent,
           transfer_user_id: transferUserId,
           transfer_link_layer: transferLinkLayer,
           alipay_app_id: appId,
@@ -89,19 +94,41 @@ function SettingsForm({ initial, refresh }: { initial: SettingsData; refresh: ()
           <div className="mt-5 grid gap-5 md:grid-cols-2">
             <div className="space-y-3">
               <Label htmlFor="qr-file">经营码图片</Label>
-              {initial.business_qr_url ? <div className="flex items-center gap-3 rounded-md border p-3"><img src={initial.business_qr_url} alt="已上传的支付宝经营码" className="size-20 object-contain" /><div className="min-w-0"><div className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="size-4 text-success" />已上传</div><p className="mt-1 truncate text-xs text-muted">{initial.business_qr_url}</p></div></div> : <div className="rounded-md border border-dashed p-5 text-center text-sm text-muted">尚未上传经营码</div>}
+              {initial.business_qr_url ? <div className="flex items-center gap-3 rounded-md border p-3"><img src={qrImageUrl(initial.business_qr_url)} alt="已上传的支付宝经营码" className="size-20 object-contain" /><div className="min-w-0"><div className="flex items-center gap-2 text-sm font-medium"><CheckCircle2 className="size-4 text-success" />已上传</div><p className="mt-1 truncate text-xs text-muted">{initial.business_qr_url}</p></div></div> : <div className="rounded-md border border-dashed p-5 text-center text-sm text-muted">尚未上传经营码</div>}
               <Input id="qr-file" type="file" accept="image/png,image/jpeg,image/webp" onChange={async (event) => {
                 const file = event.target.files?.[0];
                 if (!file) return;
                 const form = new FormData();
                 form.set("file", file);
+                setReadingQr(true);
                 try {
-                  await apiFetch("/admin-api/settings/qr", { method: "POST", body: form });
-                  toast.success("经营码已上传");
+                  const decoded = await decodeQrImage(file).catch(() => "");
+                  if (decoded && !normalizeBusinessQrContent(decoded)) throw new Error("图片中的二维码不是支付宝经营码付款链接");
+                  form.set("qr_content", decoded);
+                  const result = await apiFetch<{ qr_content: string }>("/admin-api/settings/qr", { method: "POST", body: form });
+                  setBusinessQrContent(result.qr_content);
+                  if (result.qr_content) toast.success("经营码已上传，付款链接已识别");
+                  else toast.warning("经营码已上传，未识别出付款链接，请上传清晰二维码或填写扫码结果");
                   await refresh();
                 } catch (error) { toast.error(error instanceof Error ? error.message : "上传失败"); }
+                finally { setReadingQr(false); }
               }} />
               <p className="flex items-start gap-2 text-xs leading-5 text-muted"><Upload className="mt-0.5 size-3.5 shrink-0" />支持 PNG、JPEG、WebP，最大 5MB。</p>
+              <Label htmlFor="business-qr-content">经营码付款链接</Label>
+              <Input id="business-qr-content" type="url" value={businessQrContent} onChange={(event) => setBusinessQrContent(event.target.value)} placeholder="https://qr.alipay.com/…" />
+              <Button type="button" variant="outline" disabled={readingQr || !initial.business_qr_url} onClick={async () => {
+                setReadingQr(true);
+                try {
+                  const content = normalizeBusinessQrContent(await decodeQrImage(initial.business_qr_url));
+                  if (!content) throw new Error("未识别出支付宝付款链接，请更换清晰图片或填写扫码结果");
+                  await apiFetch("/admin-api/settings", { method: "PUT", ...jsonBody({ business_qr_content: content }) });
+                  setBusinessQrContent(content);
+                  toast.success("付款链接已识别并保存");
+                  await refresh();
+                } catch (error) { toast.error(error instanceof Error ? error.message : "识别失败"); }
+                finally { setReadingQr(false); }
+              }}>{readingQr ? "正在识别…" : "识别已有经营码"}</Button>
+              <p className="text-xs leading-5 text-muted">上传时自动识别二维码中的付款链接，用于直接打开支付宝收款页。也可粘贴扫码结果；手动填写后请保存配置。</p>
             </div>
             <div className="space-y-3">
               <Label htmlFor="transfer-user">支付宝用户 ID</Label>
@@ -169,7 +196,7 @@ function SettingsForm({ initial, refresh }: { initial: SettingsData; refresh: ()
         <CardContent><div className="space-y-2"><Label htmlFor="public-base">PUBLIC_BASE_URL</Label><Input id="public-base" type="url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></div></CardContent>
       </Card>
 
-      <div className="flex justify-end"><Button size="lg" disabled={saving}>{saving ? "正在保存…" : "保存全部配置"}<Save /></Button></div>
+      <div className="flex justify-end"><Button size="lg" disabled={saving || readingQr}>{saving ? "正在保存…" : "保存全部配置"}<Save /></Button></div>
     </form>
   );
 }

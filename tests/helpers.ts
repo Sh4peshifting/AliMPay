@@ -13,6 +13,7 @@ export function configuredDatabase(mode: CollectionMode = "business_qr") {
   setSetting(database, "merchant_pid", "1000000001");
   setSetting(database, "collection_mode", mode);
   setSetting(database, "business_qr_url", "http://localhost/uploads/business-qr-0123456789abcdef.png");
+  setSetting(database, "business_qr_content", "https://qr.alipay.com/fkx-test-merchant");
   setSetting(database, "transfer_user_id", "2088000000000000");
   setSetting(database, "alipay_app_id", "2026000000000000");
   setSetting(database, "alipay_public_key", alipay.publicKey);

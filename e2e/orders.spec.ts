@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.use({ locale: "zh-CN" });
+
 test("order time filters use UTC+8, reject reversed ranges and reset all filters", async ({ page }) => {
   await page.route("**/admin-api/me", (route) => route.fulfill({ json: { user: { username: "admin" } } }));
   await page.route("**/admin-api/orders?**", (route) => {
@@ -13,6 +15,19 @@ test("order time filters use UTC+8, reject reversed ranges and reset all filters
   await page.goto("/orders");
   const summary = page.getByLabel("时段支付汇总");
   await expect(summary.getByText("5 笔", { exact: true })).toBeVisible();
+  const startInput = page.getByLabel("起始时间（UTC+8）");
+  await startInput.focus();
+  await expect(startInput).toHaveAttribute("type", "text");
+  await expect(startInput).toHaveAttribute("placeholder", "yyyy/mm/dd --:--:--");
+  // Stub the OS-owned popup while checking that opening it preserves the input.
+  await page.evaluate(() => { HTMLInputElement.prototype.showPicker = function () {}; });
+  await page.getByRole("button", { name: "选择起始时间" }).click();
+  await expect(startInput).toHaveValue("");
+  await expect(startInput).toHaveAttribute("placeholder", "yyyy/mm/dd --:--:--");
+  await page.locator('input[type="datetime-local"]').first().fill("2026-11-06T08:09:10");
+  await expect(startInput).toHaveValue("2026/11/06 08:09:10");
+  await page.getByRole("button", { name: "选择起始时间" }).click();
+  await expect(startInput).toHaveValue("2026/11/06 08:09:10");
   await page.getByLabel("起始时间（UTC+8）").fill("2026-11-06T00:00");
   await page.getByLabel("结束时间（UTC+8）").fill("2026-11-06T23:59:59");
   const applied = page.waitForRequest((request) => request.url().includes("/admin-api/orders?") && new URL(request.url()).searchParams.has("start_time"));

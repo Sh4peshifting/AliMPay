@@ -14,6 +14,7 @@ import { DateTimeInput } from "@/web/components/ui/date-time-input";
 import { Loading } from "@/web/components/ui/loading";
 import { Label } from "@/web/components/ui/label";
 import { formatDate, formatMoney } from "@/web/lib/utils";
+import { parseDateTime } from "@/web/lib/date-time";
 
 interface OrdersResponse {
   data: OrderRecord[];
@@ -42,7 +43,11 @@ export function OrdersPage() {
 
   function search(event: FormEvent) {
     event.preventDefault();
-    const asUtc = (value: string) => value ? new Date(`${value}+08:00`).toISOString() : "";
+    if ([startInput, endInput].some((value) => value.trim() && !parseDateTime(value))) {
+      setRangeError("请输入有效时间，格式为 yyyy/mm/dd hh:mm:ss");
+      return;
+    }
+    const asUtc = (value: string) => value.trim() ? new Date(`${parseDateTime(value)}+08:00`).toISOString() : "";
     const start = asUtc(startInput);
     const end = asUtc(endInput);
     if (start && end && start > end) {
@@ -73,8 +78,8 @@ export function OrdersPage() {
             </select>
             </div>
             <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-0 flex-1 space-y-2"><Label htmlFor="order-start">起始时间（UTC+8）</Label><DateTimeInput id="order-start" value={startInput} onChange={(event) => setStartInput(event.target.value)} /></div>
-              <div className="min-w-0 flex-1 space-y-2"><Label htmlFor="order-end">结束时间（UTC+8）</Label><DateTimeInput id="order-end" value={endInput} onChange={(event) => setEndInput(event.target.value)} /></div>
+              <div className="min-w-0 flex-1 space-y-2"><Label htmlFor="order-start">起始时间（UTC+8）</Label><DateTimeInput id="order-start" value={startInput} onChange={setStartInput} pickerLabel="选择起始时间" /></div>
+              <div className="min-w-0 flex-1 space-y-2"><Label htmlFor="order-end">结束时间（UTC+8）</Label><DateTimeInput id="order-end" value={endInput} onChange={setEndInput} pickerLabel="选择结束时间" /></div>
               <Button type="submit" variant="outline"><Search />筛选</Button>
               <Button type="button" variant="ghost" onClick={() => { setStartInput(""); setEndInput(""); setRange({ start: "", end: "" }); setRangeError(""); setQueryInput(""); setQuery(""); setStatus(""); setPage(1); }}>重置</Button>
             </div>

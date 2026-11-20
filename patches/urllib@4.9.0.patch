@@ -1,0 +1,42 @@
+diff --git a/dist/commonjs/HttpClient.js b/dist/commonjs/HttpClient.js
+index 5a37c4ca77c8dd934575ca650259e59ab2fc4785..6c04980309eed188c0e169bcafacbaf48adf3625 100644
+--- a/dist/commonjs/HttpClient.js
++++ b/dist/commonjs/HttpClient.js
+@@ -21,7 +21,8 @@ const node_zlib_1 = require("node:zlib");
+ const formstream_1 = __importDefault(require("formstream"));
+ const mime_types_1 = __importDefault(require("mime-types"));
+ const qs_1 = __importDefault(require("qs"));
+-const undici_1 = require("undici");
++// Bun's built-in undici auto-decompresses; urllib needs the raw response body.
++const undici_1 = require("undici/index.js");
+ // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+ // @ts-ignore
+ const symbols_js_1 = __importDefault(require("undici/lib/core/symbols.js"));
+diff --git a/dist/esm/HttpClient.js b/dist/esm/HttpClient.js
+index 31c34cee6e7fe2c98628150ed7e28b27dab26326..f6130332da714a6aa6d2e9fc8a4af7703dc18103 100644
+--- a/dist/esm/HttpClient.js
++++ b/dist/esm/HttpClient.js
+@@ -15,7 +15,8 @@ import { createGunzip, createBrotliDecompress, gunzipSync, brotliDecompressSync
+ import FormStream from 'formstream';
+ import mime from 'mime-types';
+ import qs from 'qs';
+-import { request as undiciRequest, Agent, getGlobalDispatcher } from 'undici';
++// Bun's built-in undici auto-decompresses; urllib needs the raw response body.
++import { request as undiciRequest, Agent, getGlobalDispatcher } from 'undici/index.js';
+ // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+ // @ts-ignore
+ import undiciSymbols from 'undici/lib/core/symbols.js';
+diff --git a/src/HttpClient.ts b/src/HttpClient.ts
+index 268eb1ee081cd18af5c824a06047cc4a2a25e382..eba52d1100410c8596957c6ebb3375b826c31d3a 100644
+--- a/src/HttpClient.ts
++++ b/src/HttpClient.ts
+@@ -18,7 +18,8 @@ import { createGunzip, createBrotliDecompress, gunzipSync, brotliDecompressSync
+ import FormStream from 'formstream';
+ import mime from 'mime-types';
+ import qs from 'qs';
+-import { request as undiciRequest, Dispatcher, Agent, getGlobalDispatcher, Pool } from 'undici';
++// Bun's built-in undici auto-decompresses; urllib needs the raw response body.
++import { request as undiciRequest, Dispatcher, Agent, getGlobalDispatcher, Pool } from 'undici/index.js';
+ // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+ // @ts-ignore
+ import undiciSymbols from 'undici/lib/core/symbols.js';

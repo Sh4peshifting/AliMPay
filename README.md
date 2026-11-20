@@ -51,6 +51,8 @@ bun run dev
 - 后端地址：`http://localhost:3000`
 - 生产构建：`bun run build && bun start`
 
+支付宝 SDK 的 HTTP 查询使用 `patches/urllib@4.9.0.patch`，让 urllib 加载 npm undici 的原始响应实现，避免 Bun 内置 undici 自动解压后被 urllib 再次解压。请求签名和响应验签仍由官方支付宝 SDK 完成。补丁通过 `bun install` 自动应用，Docker 的构建和运行阶段也会安装该补丁。
+
 首次启动会自动生成 32 字节随机主密钥，并以 `0600` 权限保存到 `DATA_DIR/.master-key`。`APP_MASTER_KEY` 不是支付宝应用私钥或易支付签名密钥，而是本程序用来加密数据库敏感字段的内部根密钥，通常无需手工设置。
 
 只有在使用外部密钥管理系统时才需要显式设置 `APP_MASTER_KEY`，格式为 32 字节 Base64 或 64 位十六进制：
